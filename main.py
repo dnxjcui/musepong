@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+
+import sys
+import time
+import argparse
+from typing import Optional
+
+# Add src to path
+sys.path.append('src')
+
+from eeg.stream import connect_to_muse, get_eeg_chunk, get_sampling_rate
+from eeg.processing import preprocess_eeg, compute_band_powers
+from detection_methods.blink_detection import BlinkDetector
+from game_environments.pong import PongGame
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Muse-Pong: EEG-controlled Pong game')
+    parser.add_argument('--simulation', action='store_true', 
+                       help='Run in simulation mode (spacebar = blink)')
+    args = parser.parse_args()
+    
+    simulation_mode = args.simulation
+    
+    # Initialize game
+    game = PongGame()
+    
+    # Initialize EEG components (only if not in simulation mode)
+    inlet = None
+    blink_detector = None
+    
+    if not simulation_mode:
+        try:
+            print("Connecting to Muse EEG stream...")
+            inlet, fs = connect_to_muse()
+            blink_detector = BlinkDetector()
+            print("EEG connection established!")
+        except RuntimeError as e:
+            print(f"Failed to connect to EEG stream: {e}")
+            print("You can run in simulation mode with --simulation flag")
+            game.cleanup()
+            return
+    else:
+        print("Running in simulation mode - press SPACEBAR to blink")
+    
+    print("Starting Muse-Pong! Blink to move the paddle.")
+    print("Close the window to quit.")
+    
+    # Main game loop
+    try:
+        while game.running:
+            blink_detected = False
+            
+            # Get EEG data and detect blinks (only if not in simulation mode)
+            if not simulation_mode and inlet is not None:
+                eeg_data, timestamp = get_eeg_chunk(inlet, timeout=0.01, max_samples=64)
+                
+                if eeg_data is not None and len(eeg_data) > 0:
+                    # Process EEG data
+                    processed_data = preprocess_eeg(eeg_data, fs)
+                    band_powers = compute_band_powers(processed_data, fs)
+                    
+                    # Detect blink
+                    blink_detected = blink_detector.detect_blink(band_powers)
+                    
+                    if blink_detected:
+                        print("Blink detected!")
+            
+            # Run one frame of the game
+            if not game.run_frame(blink_detected, simulation_mode):
+                break
+                
+    except KeyboardInterrupt:
+        print("\nGame interrupted by user")
+    except Exception as e:
+        print(f"Error during game loop: {e}")
+    finally:
+        game.cleanup()
+        print("Game ended")
+
+
+if __name__ == "__main__":
+    main()
