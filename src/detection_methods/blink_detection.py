@@ -14,6 +14,8 @@ class BlinkDetector:
         self.delta = np.zeros(10)
         self.counter = 0
         self.blinked = False
+        self.all_alphas = []
+        self.all_counter = 0
         
     def detect_blink(self, band_powers: Dict[str, float]) -> bool:
         """
@@ -38,14 +40,23 @@ class BlinkDetector:
             self.counter = 0
         is_blink = (np.mean(self.alpha) > self.alpha_threshold) #and np.mean(self.delta) > self.delta_threshold)
 
-        # self.blinked means we just blinked. It flips to False when we don't detect an active blink. We need self.blinked to be False and is_blink to be True for is_blink to work
-        # if is_blink and not self.blinked:
-        #     is_blink = True
-        # else:
-        #     is_blink = False
+
         is_blink = is_blink and current_time - self.last_blink_time > 2.0
 
         # print(f"Alpha: {np.mean(self.alpha)}, Delta: {np.mean(self.delta)}")
+        self.all_alphas.append(alpha)
+
+        if len(self.all_alphas) > 10000:
+            self.all_alphas[self.all_counter] = alpha
+            self.all_counter += 1
+        if self.all_counter == 10000:
+            self.all_counter = 0
+
+        if len(self.all_alphas) > 1000:
+            self.alpha_threshold = np.median(self.all_alphas)
+            if self.alpha_threshold < 10: # something's wrong
+                raise ValueError("Alpha threshold is too low, fix your headset")
+
         if is_blink:
             self.last_blink_time = current_time
             self.blinked = True
