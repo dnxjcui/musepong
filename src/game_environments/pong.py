@@ -5,7 +5,7 @@ from typing import Tuple
 
 
 class PongGame:
-    def __init__(self, width: int = 600, height: int = 400, npc_mode: bool = False, ball_speed: float = 3.0):
+    def __init__(self, width: int = 600, height: int = 400, npc_mode: bool = False, ball_speed: float = 6.0):
         # Constants
         self.WIDTH = width
         self.HEIGHT = height
@@ -40,10 +40,10 @@ class PongGame:
         self.running = True
         self.paddle_direction = 1  # 1 for up, -1 for down
         self.paddle_speed = 4
-        self.pause_time = 0
-        self.pause_duration = 120  # 2 seconds at 60 FPS
         self.npc_mode = npc_mode
         self.ball_speed = ball_speed
+        self.game_started = False  # New state for blink-to-start
+        self.ball_start_right = True  # Default ball direction for start
         
         # Keyboard state for paddle2
         self.keys_pressed = set()
@@ -53,19 +53,27 @@ class PongGame:
     def ball_init(self, right):
         """Initialize ball position and velocity."""
         self.ball_pos = [self.WIDTH/2, self.HEIGHT/2]
-        horz = self.ball_speed * random.uniform(0.7, 1.3)  # Random variation
-        vert = self.ball_speed * random.uniform(0.3, 0.8)
         
-        if not right:
-            horz = -horz
+        if self.game_started:
+            # Only set velocity if game has started
+            horz = self.ball_speed * random.uniform(0.7, 1.3)  # Random variation
+            vert = self.ball_speed * random.uniform(0.3, 0.8)
             
-        self.ball_vel = [horz, -vert]
+            if not right:
+                horz = -horz
+                
+            self.ball_vel = [horz, -vert]
+        else:
+            # Ball starts stationary
+            self.ball_vel = [0, 0]
+            # Store intended direction for when game starts
+            self.ball_start_right = right
     
     def init_game(self):
         """Initialize game state."""
         self.paddle1_pos = [self.HALF_PAD_WIDTH - 1, self.HEIGHT/2]
         self.paddle2_pos = [self.WIDTH + 1 - self.HALF_PAD_WIDTH, self.HEIGHT/2]
-        self.paddle1_vel = self.paddle_direction * self.paddle_speed  # Start moving
+        self.paddle1_vel = 0  # Don't start moving until game starts
         self.l_score = 0
         self.r_score = 0
         
@@ -75,17 +83,42 @@ class PongGame:
             self.ball_init(False)
     
     def reset_paddles(self):
-        """Reset paddles to center position and start moving."""
+        """Reset paddles to center position and continue moving."""
         self.paddle1_pos = [self.HALF_PAD_WIDTH - 1, self.HEIGHT/2]
         self.paddle2_pos = [self.WIDTH + 1 - self.HALF_PAD_WIDTH, self.HEIGHT/2]
         self.paddle_direction = 1  # Reset to moving up
-        self.paddle1_vel = self.paddle_direction * self.paddle_speed
+        if self.game_started:  # Only start moving if game has started
+            self.paddle1_vel = self.paddle_direction * self.paddle_speed
     
     def handle_blink(self):
-        """Handle blink input - changes paddle direction."""
-        self.paddle_direction *= -1  # Alternate direction
-        self.paddle1_vel = self.paddle_direction * self.paddle_speed
+        """Handle blink input - starts game or changes paddle direction."""
+        if not self.game_started:
+            self.start_game()
+        else:
+            self.paddle_direction *= -1  # Alternate direction
+            self.paddle1_vel = self.paddle_direction * self.paddle_speed
         print("Blink detected!")
+    
+    def start_game(self):
+        """Start the game - begin paddle and ball movement."""
+        self.game_started = True
+        self.paddle1_vel = self.paddle_direction * self.paddle_speed
+        
+        # Start ball movement using stored direction
+        horz = self.ball_speed * random.uniform(0.7, 1.3)
+        vert = self.ball_speed * random.uniform(0.3, 0.8)
+        
+        if not self.ball_start_right:
+            horz = -horz
+            
+        self.ball_vel = [horz, -vert]
+    
+    def reset_round(self, ball_direction_right):
+        """Reset for next round - requires blink to start."""
+        self.game_started = False
+        self.paddle1_vel = 0
+        self.reset_paddles()
+        self.ball_init(ball_direction_right)
     
     def draw(self):
         """Main draw function."""
@@ -97,11 +130,8 @@ class PongGame:
         pygame.draw.line(self.window, self.WHITE, [self.WIDTH - self.PAD_WIDTH, 0], [self.WIDTH - self.PAD_WIDTH, self.HEIGHT], 1)
         pygame.draw.circle(self.window, self.WHITE, [self.WIDTH//2, self.HEIGHT//2], 70, 1)
         
-        # Handle pause after scoring
-        if self.pause_time > 0:
-            self.pause_time -= 1
-            # Don't update positions during pause
-        else:
+        # Only update positions if game has started
+        if self.game_started:
             # Update paddle positions - paddle bounces off top/bottom walls
             if (self.paddle1_pos[1] > self.HALF_PAD_HEIGHT and 
                 self.paddle1_pos[1] < self.HEIGHT - self.HALF_PAD_HEIGHT):
@@ -178,9 +208,7 @@ class PongGame:
             self.ball_vel[1] *= 1.1
         elif int(self.ball_pos[0]) <= self.BALL_RADIUS + self.PAD_WIDTH:
             self.r_score += 1
-            self.reset_paddles()
-            self.ball_init(True)
-            self.pause_time = self.pause_duration
+            self.reset_round(True)
         
         if (int(self.ball_pos[0]) >= self.WIDTH + 1 - self.BALL_RADIUS - self.PAD_WIDTH and 
             int(self.ball_pos[1]) in range(int(self.paddle2_pos[1] - self.HALF_PAD_HEIGHT), 
@@ -190,9 +218,7 @@ class PongGame:
             self.ball_vel[1] *= 1.1
         elif int(self.ball_pos[0]) >= self.WIDTH + 1 - self.BALL_RADIUS - self.PAD_WIDTH:
             self.l_score += 1
-            self.reset_paddles()
-            self.ball_init(False)
-            self.pause_time = self.pause_duration
+            self.reset_round(False)
         
         # Draw scores
         font = pygame.font.SysFont("Comic Sans MS", 20)
@@ -201,6 +227,13 @@ class PongGame:
         
         label2 = font.render("Score " + str(self.r_score), 1, self.YELLOW)
         self.window.blit(label2, (470, 20))
+        
+        # Draw "Blink to start!" text if game hasn't started
+        if not self.game_started:
+            big_font = pygame.font.SysFont("Comic Sans MS", 36)
+            start_text = big_font.render("Blink to start!", 1, self.WHITE)
+            text_rect = start_text.get_rect(center=(self.WIDTH//2, self.HEIGHT//2))
+            self.window.blit(start_text, text_rect)
     
     def process_events(self):
         """Process pygame events."""

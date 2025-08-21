@@ -45,7 +45,7 @@ class BlinkDetector:
         #     is_blink = False
         is_blink = is_blink and current_time - self.last_blink_time > 2.0
 
-        print(f"Alpha: {np.mean(self.alpha)}, Delta: {np.mean(self.delta)}")
+        # print(f"Alpha: {np.mean(self.alpha)}, Delta: {np.mean(self.delta)}")
         if is_blink:
             self.last_blink_time = current_time
             self.blinked = True
