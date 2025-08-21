@@ -6,12 +6,22 @@ from typing import Tuple, Dict
 def bandpass_filter(data: np.ndarray, lowcut: float, highcut: float, 
                    fs: int, order: int = 4) -> np.ndarray:
     """Apply bandpass filter to EEG data."""
+    # Skip filtering if data is too short
+    if len(data) < 30:  # Minimum length for filter
+        return data
+        
     nyquist = 0.5 * fs
     low = lowcut / nyquist
     high = highcut / nyquist
     
     b, a = signal.butter(order, [low, high], btype='band')
-    filtered_data = signal.filtfilt(b, a, data, axis=0)
+    
+    # Use filtfilt if data is long enough, otherwise use lfilter
+    try:
+        filtered_data = signal.filtfilt(b, a, data, axis=0)
+    except ValueError:
+        # Fallback to simple filter if filtfilt fails
+        filtered_data = signal.lfilter(b, a, data, axis=0)
     
     return filtered_data
 

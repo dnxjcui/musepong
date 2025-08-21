@@ -3,6 +3,7 @@
 import sys
 import time
 import argparse
+import numpy as np
 from typing import Optional
 
 # Add src to path
@@ -28,6 +29,8 @@ def main():
     # Initialize EEG components (only if not in simulation mode)
     inlet = None
     blink_detector = None
+    eeg_buffer = []
+    buffer_size = 256  # 1 second of data at 256 Hz
     
     if not simulation_mode:
         try:
@@ -53,18 +56,27 @@ def main():
             
             # Get EEG data and detect blinks (only if not in simulation mode)
             if not simulation_mode and inlet is not None:
-                eeg_data, timestamp = get_eeg_chunk(inlet, timeout=0.01, max_samples=64)
+                eeg_data, timestamp = get_eeg_chunk(inlet, timeout=0.05, max_samples=128)
                 
                 if eeg_data is not None and len(eeg_data) > 0:
-                    # Process EEG data
-                    processed_data = preprocess_eeg(eeg_data, fs)
-                    band_powers = compute_band_powers(processed_data, fs)
+                    # Add new data to buffer
+                    eeg_buffer.extend(eeg_data)
                     
-                    # Detect blink
-                    blink_detected = blink_detector.detect_blink(band_powers)
+                    # Keep buffer at fixed size
+                    if len(eeg_buffer) > buffer_size:
+                        eeg_buffer = eeg_buffer[-buffer_size:]
                     
-                    if blink_detected:
-                        print("Blink detected!")
+                    # Only process if we have enough data
+                    if len(eeg_buffer) >= 64:  # Minimum for processing
+                        # Process EEG data
+                        processed_data = preprocess_eeg(np.array(eeg_buffer), fs)
+                        band_powers = compute_band_powers(processed_data, fs)
+                        
+                        # Detect blink
+                        blink_detected = blink_detector.detect_blink(band_powers)
+                        
+                        if blink_detected:
+                            print("Blink detected!")
             
             # Run one frame of the game
             if not game.run_frame(blink_detected, simulation_mode):
