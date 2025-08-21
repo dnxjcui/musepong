@@ -1,141 +1,189 @@
-import imgui
-from imgui.integrations.pygame import PygameRenderer
 import pygame
-import time
+import random
+import sys
 from typing import Tuple
 
 
 class PongGame:
-    def __init__(self, width: int = 640, height: int = 480):
-        self.width = width
-        self.height = height
+    def __init__(self, width: int = 600, height: int = 400):
+        # Constants
+        self.WIDTH = width
+        self.HEIGHT = height
+        self.BALL_RADIUS = 10
+        self.PAD_WIDTH = 8
+        self.PAD_HEIGHT = 80
+        self.HALF_PAD_WIDTH = self.PAD_WIDTH / 2
+        self.HALF_PAD_HEIGHT = self.PAD_HEIGHT / 2
         
-        # Game state
-        self.paddle_x = 50
-        self.paddle_y = height // 2 - 40
-        self.paddle_width = 10
-        self.paddle_height = 80
-        self.paddle_speed = 20
-        self.paddle_direction = 1  # 1 for up, -1 for down
-        
-        self.ball_x = width // 2
-        self.ball_y = height // 2
-        self.ball_size = 10
-        self.ball_dx = 3
-        self.ball_dy = 2
+        # Colors
+        self.WHITE = (255, 255, 255)
+        self.RED = (255, 0, 0)
+        self.GREEN = (0, 255, 0)
+        self.BLACK = (0, 0, 0)
+        self.YELLOW = (255, 255, 0)
         
         # Game setup
         pygame.init()
-        self.screen = pygame.display.set_mode((width, height), 
-                                              pygame.DOUBLEBUF | pygame.OPENGL | pygame.RESIZABLE)
+        self.window = pygame.display.set_mode((self.WIDTH, self.HEIGHT), 0, 32)
         pygame.display.set_caption("Muse-Pong")
-        
-        imgui.create_context()
-        self.renderer = PygameRenderer()
-        
-        self.running = True
         self.clock = pygame.time.Clock()
         
+        # Game state
+        self.ball_pos = [0, 0]
+        self.ball_vel = [0, 0]
+        self.paddle1_pos = [0, 0]
+        self.paddle2_pos = [0, 0]
+        self.paddle1_vel = 0
+        self.paddle2_vel = 0
+        self.l_score = 0
+        self.r_score = 0
+        self.running = True
+        self.paddle_direction = 1  # 1 for up, -1 for down
+        self.paddle_speed = 4
+        self.pause_time = 0
+        self.pause_duration = 120  # 2 seconds at 60 FPS
+        
+        self.init_game()
+    
+    def ball_init(self, right):
+        """Initialize ball position and velocity."""
+        self.ball_pos = [self.WIDTH/2, self.HEIGHT/2]
+        horz = random.randrange(2, 4)
+        vert = random.randrange(1, 3)
+        
+        if not right:
+            horz = -horz
+            
+        self.ball_vel = [horz, -vert]
+    
+    def init_game(self):
+        """Initialize game state."""
+        self.paddle1_pos = [self.HALF_PAD_WIDTH - 1, self.HEIGHT/2]
+        self.paddle2_pos = [self.WIDTH + 1 - self.HALF_PAD_WIDTH, self.HEIGHT/2]
+        self.paddle1_vel = self.paddle_direction * self.paddle_speed  # Start moving
+        self.l_score = 0
+        self.r_score = 0
+        
+        if random.randrange(0, 2) == 0:
+            self.ball_init(True)
+        else:
+            self.ball_init(False)
+    
+    def reset_paddles(self):
+        """Reset paddles to center position and start moving."""
+        self.paddle1_pos = [self.HALF_PAD_WIDTH - 1, self.HEIGHT/2]
+        self.paddle2_pos = [self.WIDTH + 1 - self.HALF_PAD_WIDTH, self.HEIGHT/2]
+        self.paddle_direction = 1  # Reset to moving up
+        self.paddle1_vel = self.paddle_direction * self.paddle_speed
+    
     def handle_blink(self):
-        """Handle blink input - alternates paddle direction."""
-        self.paddle_y += self.paddle_direction * self.paddle_speed
+        """Handle blink input - changes paddle direction."""
         self.paddle_direction *= -1  # Alternate direction
-        
-        # Keep paddle in bounds
-        self.paddle_y = max(0, min(self.paddle_y, self.height - self.paddle_height))
+        self.paddle1_vel = self.paddle_direction * self.paddle_speed
+        print("Blink detected!")
     
-    def handle_spacebar(self):
-        """Handle spacebar input (simulation mode) - same as blink."""
-        self.handle_blink()
+    def draw(self):
+        """Main draw function."""
+        self.window.fill(self.BLACK)
+        
+        # Draw lines
+        pygame.draw.line(self.window, self.WHITE, [self.WIDTH / 2, 0], [self.WIDTH / 2, self.HEIGHT], 1)
+        pygame.draw.line(self.window, self.WHITE, [self.PAD_WIDTH, 0], [self.PAD_WIDTH, self.HEIGHT], 1)
+        pygame.draw.line(self.window, self.WHITE, [self.WIDTH - self.PAD_WIDTH, 0], [self.WIDTH - self.PAD_WIDTH, self.HEIGHT], 1)
+        pygame.draw.circle(self.window, self.WHITE, [self.WIDTH//2, self.HEIGHT//2], 70, 1)
+        
+        # Handle pause after scoring
+        if self.pause_time > 0:
+            self.pause_time -= 1
+            # Don't update positions during pause
+        else:
+            # Update paddle positions - paddle bounces off top/bottom walls
+            if (self.paddle1_pos[1] > self.HALF_PAD_HEIGHT and 
+                self.paddle1_pos[1] < self.HEIGHT - self.HALF_PAD_HEIGHT):
+                self.paddle1_pos[1] += self.paddle1_vel
+            elif self.paddle1_pos[1] <= self.HALF_PAD_HEIGHT and self.paddle1_vel < 0:
+                # Hit top wall, reverse direction
+                self.paddle1_vel = 0
+            elif self.paddle1_pos[1] >= self.HEIGHT - self.HALF_PAD_HEIGHT and self.paddle1_vel > 0:
+                # Hit bottom wall, reverse direction  
+                self.paddle1_vel = 0
+            else:
+                self.paddle1_pos[1] += self.paddle1_vel
+            
+            # Update ball position
+            self.ball_pos[0] += int(self.ball_vel[0])
+            self.ball_pos[1] += int(self.ball_vel[1])
+        
+        # Draw ball and paddles
+        pygame.draw.circle(self.window, self.RED, [int(self.ball_pos[0]), int(self.ball_pos[1])], self.BALL_RADIUS, 0)
+        
+        # Draw paddle1 (left, controlled by blinks)
+        pygame.draw.polygon(self.window, self.GREEN, [
+            [self.paddle1_pos[0] - self.HALF_PAD_WIDTH, self.paddle1_pos[1] - self.HALF_PAD_HEIGHT],
+            [self.paddle1_pos[0] - self.HALF_PAD_WIDTH, self.paddle1_pos[1] + self.HALF_PAD_HEIGHT],
+            [self.paddle1_pos[0] + self.HALF_PAD_WIDTH, self.paddle1_pos[1] + self.HALF_PAD_HEIGHT],
+            [self.paddle1_pos[0] + self.HALF_PAD_WIDTH, self.paddle1_pos[1] - self.HALF_PAD_HEIGHT]
+        ], 0)
+        
+        # Draw paddle2 (right, stationary for now)
+        pygame.draw.polygon(self.window, self.GREEN, [
+            [self.paddle2_pos[0] - self.HALF_PAD_WIDTH, self.paddle2_pos[1] - self.HALF_PAD_HEIGHT],
+            [self.paddle2_pos[0] - self.HALF_PAD_WIDTH, self.paddle2_pos[1] + self.HALF_PAD_HEIGHT],
+            [self.paddle2_pos[0] + self.HALF_PAD_WIDTH, self.paddle2_pos[1] + self.HALF_PAD_HEIGHT],
+            [self.paddle2_pos[0] + self.HALF_PAD_WIDTH, self.paddle2_pos[1] - self.HALF_PAD_HEIGHT]
+        ], 0)
+        
+        # Ball collision with walls
+        if int(self.ball_pos[1]) <= self.BALL_RADIUS:
+            self.ball_vel[1] = -self.ball_vel[1]
+        if int(self.ball_pos[1]) >= self.HEIGHT + 1 - self.BALL_RADIUS:
+            self.ball_vel[1] = -self.ball_vel[1]
+        
+        # Ball collision with paddles
+        if (int(self.ball_pos[0]) <= self.BALL_RADIUS + self.PAD_WIDTH and 
+            int(self.ball_pos[1]) in range(int(self.paddle1_pos[1] - self.HALF_PAD_HEIGHT), 
+                                         int(self.paddle1_pos[1] + self.HALF_PAD_HEIGHT), 1)):
+            self.ball_vel[0] = -self.ball_vel[0]
+            self.ball_vel[0] *= 1.1
+            self.ball_vel[1] *= 1.1
+        elif int(self.ball_pos[0]) <= self.BALL_RADIUS + self.PAD_WIDTH:
+            self.r_score += 1
+            self.reset_paddles()
+            self.ball_init(True)
+            self.pause_time = self.pause_duration
+        
+        if (int(self.ball_pos[0]) >= self.WIDTH + 1 - self.BALL_RADIUS - self.PAD_WIDTH and 
+            int(self.ball_pos[1]) in range(int(self.paddle2_pos[1] - self.HALF_PAD_HEIGHT), 
+                                         int(self.paddle2_pos[1] + self.HALF_PAD_HEIGHT), 1)):
+            self.ball_vel[0] = -self.ball_vel[0]
+            self.ball_vel[0] *= 1.1
+            self.ball_vel[1] *= 1.1
+        elif int(self.ball_pos[0]) >= self.WIDTH + 1 - self.BALL_RADIUS - self.PAD_WIDTH:
+            self.l_score += 1
+            self.reset_paddles()
+            self.ball_init(False)
+            self.pause_time = self.pause_duration
+        
+        # Draw scores
+        font = pygame.font.SysFont("Comic Sans MS", 20)
+        label1 = font.render("Score " + str(self.l_score), 1, self.YELLOW)
+        self.window.blit(label1, (50, 20))
+        
+        label2 = font.render("Score " + str(self.r_score), 1, self.YELLOW)
+        self.window.blit(label2, (470, 20))
     
-    def update_ball(self):
-        """Update ball position and handle collisions."""
-        self.ball_x += self.ball_dx
-        self.ball_y += self.ball_dy
-        
-        # Ball collision with top/bottom walls
-        if self.ball_y <= 0 or self.ball_y >= self.height - self.ball_size:
-            self.ball_dy *= -1
-        
-        # Ball collision with left paddle
-        if (self.ball_x <= self.paddle_x + self.paddle_width and 
-            self.ball_y >= self.paddle_y and 
-            self.ball_y <= self.paddle_y + self.paddle_height):
-            self.ball_dx *= -1
-            self.ball_x = self.paddle_x + self.paddle_width
-        
-        # Ball goes off left edge - reset
-        if self.ball_x < 0:
-            self.reset_ball()
-        
-        # Ball goes off right edge - reset
-        if self.ball_x > self.width:
-            self.reset_ball()
-    
-    def reset_ball(self):
-        """Reset ball to center."""
-        self.ball_x = self.width // 2
-        self.ball_y = self.height // 2
-        self.ball_dx *= -1  # Change direction
-    
-    def process_events(self) -> bool:
-        """Process pygame events. Returns False if should quit."""
+    def process_events(self):
+        """Process pygame events."""
         spacebar_pressed = False
         
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                return False
+                return False, spacebar_pressed
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_SPACE:
                     spacebar_pressed = True
-            
-            self.renderer.process_event(event)
         
         return True, spacebar_pressed
-    
-    def render(self):
-        """Render the game using imgui."""
-        self.renderer.process_inputs()
-        imgui.new_frame()
-        
-        # Create fullscreen window
-        imgui.set_next_window_position(0, 0)
-        imgui.set_next_window_size(self.width, self.height)
-        
-        imgui.begin("Pong", flags=imgui.WINDOW_NO_TITLE_BAR | 
-                                 imgui.WINDOW_NO_RESIZE | 
-                                 imgui.WINDOW_NO_MOVE | 
-                                 imgui.WINDOW_NO_SCROLLBAR)
-        
-        draw_list = imgui.get_window_draw_list()
-        
-        # Draw paddle
-        draw_list.add_rect_filled(
-            self.paddle_x, self.paddle_y,
-            self.paddle_x + self.paddle_width, self.paddle_y + self.paddle_height,
-            imgui.get_color_u32_rgba(1, 1, 1, 1)
-        )
-        
-        # Draw ball
-        draw_list.add_rect_filled(
-            self.ball_x, self.ball_y,
-            self.ball_x + self.ball_size, self.ball_y + self.ball_size,
-            imgui.get_color_u32_rgba(1, 1, 1, 1)
-        )
-        
-        # Draw center line
-        for y in range(0, self.height, 20):
-            draw_list.add_rect_filled(
-                self.width // 2 - 2, y,
-                self.width // 2 + 2, y + 10,
-                imgui.get_color_u32_rgba(0.5, 0.5, 0.5, 1)
-            )
-        
-        imgui.end()
-        
-        imgui.render()
-        self.renderer.render(imgui.get_draw_data())
-        pygame.display.flip()
     
     def run_frame(self, blink_detected: bool = False, simulation_mode: bool = False):
         """Run one frame of the game."""
@@ -149,16 +197,14 @@ class PongGame:
         if blink_detected or (simulation_mode and spacebar_pressed):
             self.handle_blink()
         
-        # Update game state
-        self.update_ball()
+        # Draw everything
+        self.draw()
         
-        # Render
-        self.render()
-        self.clock.tick(60)  # 60 FPS
+        pygame.display.update()
+        self.clock.tick(60)
         
         return True
     
     def cleanup(self):
         """Clean up resources."""
-        self.renderer.shutdown()
         pygame.quit()
