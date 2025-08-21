@@ -19,12 +19,15 @@ def main():
     parser = argparse.ArgumentParser(description='Muse-Pong: EEG-controlled Pong game')
     parser.add_argument('--simulation', action='store_true', 
                        help='Run in simulation mode (spacebar = blink)')
+    parser.add_argument('--npc', action='store_true', 
+                       help='Play against AI opponent instead of human player')
     args = parser.parse_args()
     
     simulation_mode = args.simulation
+    npc_mode = args.npc
     
     # Initialize game
-    game = PongGame()
+    game = PongGame(npc_mode=npc_mode)
     
     # Initialize EEG components (only if not in simulation mode)
     inlet = None
@@ -47,6 +50,10 @@ def main():
         print("Running in simulation mode - press SPACEBAR to blink")
     
     print("Starting Muse-Pong! Blink to move the paddle.")
+    if npc_mode:
+        print("Playing against AI opponent.")
+    else:
+        print("Playing against human opponent - use UP/DOWN arrows for right paddle.")
     print("Close the window to quit.")
     
     # Main game loop

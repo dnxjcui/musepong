@@ -5,7 +5,7 @@ from typing import Tuple
 
 
 class PongGame:
-    def __init__(self, width: int = 600, height: int = 400):
+    def __init__(self, width: int = 600, height: int = 400, npc_mode: bool = False):
         # Constants
         self.WIDTH = width
         self.HEIGHT = height
@@ -42,6 +42,10 @@ class PongGame:
         self.paddle_speed = 4
         self.pause_time = 0
         self.pause_duration = 120  # 2 seconds at 60 FPS
+        self.npc_mode = npc_mode
+        
+        # Keyboard state for paddle2
+        self.keys_pressed = set()
         
         self.init_game()
     
@@ -109,6 +113,31 @@ class PongGame:
                 self.paddle1_vel = 0
             else:
                 self.paddle1_pos[1] += self.paddle1_vel
+            
+            # Update paddle2 position
+            if self.npc_mode:
+                # AI follows ball Y position
+                ball_center_y = self.ball_pos[1]
+                paddle2_center_y = self.paddle2_pos[1]
+                
+                if ball_center_y < paddle2_center_y - 5:
+                    self.paddle2_pos[1] -= 3  # Move up
+                elif ball_center_y > paddle2_center_y + 5:
+                    self.paddle2_pos[1] += 3  # Move down
+                
+                # Keep paddle2 in bounds
+                self.paddle2_pos[1] = max(self.HALF_PAD_HEIGHT, 
+                                        min(self.paddle2_pos[1], self.HEIGHT - self.HALF_PAD_HEIGHT))
+            else:
+                # Human keyboard control
+                if pygame.K_UP in self.keys_pressed:
+                    self.paddle2_pos[1] -= 6
+                if pygame.K_DOWN in self.keys_pressed:
+                    self.paddle2_pos[1] += 6
+                
+                # Keep paddle2 in bounds
+                self.paddle2_pos[1] = max(self.HALF_PAD_HEIGHT, 
+                                        min(self.paddle2_pos[1], self.HEIGHT - self.HALF_PAD_HEIGHT))
             
             # Update ball position
             self.ball_pos[0] += int(self.ball_vel[0])
@@ -182,6 +211,11 @@ class PongGame:
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_SPACE:
                     spacebar_pressed = True
+                elif event.key in [pygame.K_UP, pygame.K_DOWN]:
+                    self.keys_pressed.add(event.key)
+            elif event.type == pygame.KEYUP:
+                if event.key in [pygame.K_UP, pygame.K_DOWN]:
+                    self.keys_pressed.discard(event.key)
         
         return True, spacebar_pressed
     
