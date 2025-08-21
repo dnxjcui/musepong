@@ -5,7 +5,7 @@ from typing import Tuple
 
 
 class PongGame:
-    def __init__(self, width: int = 600, height: int = 400, npc_mode: bool = False):
+    def __init__(self, width: int = 600, height: int = 400, npc_mode: bool = False, ball_speed: float = 3.0):
         # Constants
         self.WIDTH = width
         self.HEIGHT = height
@@ -43,6 +43,7 @@ class PongGame:
         self.pause_time = 0
         self.pause_duration = 120  # 2 seconds at 60 FPS
         self.npc_mode = npc_mode
+        self.ball_speed = ball_speed
         
         # Keyboard state for paddle2
         self.keys_pressed = set()
@@ -52,8 +53,8 @@ class PongGame:
     def ball_init(self, right):
         """Initialize ball position and velocity."""
         self.ball_pos = [self.WIDTH/2, self.HEIGHT/2]
-        horz = random.randrange(2, 4)
-        vert = random.randrange(1, 3)
+        horz = self.ball_speed * random.uniform(0.7, 1.3)  # Random variation
+        vert = self.ball_speed * random.uniform(0.3, 0.8)
         
         if not right:
             horz = -horz
